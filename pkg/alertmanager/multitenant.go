@@ -1005,11 +1005,12 @@ func (am *MultitenantAlertmanager) HandleRequest(ctx context.Context, in *httpgr
 
 // serveRequest serves the Alertmanager's web UI and API.
 func (am *MultitenantAlertmanager) serveRequest(w http.ResponseWriter, req *http.Request) {
-	userID, err := tenant.TenantID(req.Context())
+	tenantIDs, err := tenant.TenantIDs(req.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	userID := tenant.JoinTenantIDs(tenantIDs)
 	am.alertmanagersMtx.Lock()
 	userAM, ok := am.alertmanagers[userID]
 	am.alertmanagersMtx.Unlock()
@@ -1185,10 +1186,11 @@ func (am *MultitenantAlertmanager) ReadFullStateForUser(ctx context.Context, use
 
 // UpdateState implements the Alertmanager service.
 func (am *MultitenantAlertmanager) UpdateState(ctx context.Context, part *clusterpb.Part) (*alertmanagerpb.UpdateStateResponse, error) {
-	userID, err := tenant.TenantID(ctx)
+	tenantIDs, err := tenant.TenantIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
+	userID := tenant.JoinTenantIDs(tenantIDs)
 
 	am.alertmanagersMtx.Lock()
 	userAM, ok := am.alertmanagers[userID]
@@ -1291,10 +1293,11 @@ func (am *MultitenantAlertmanager) getPerUserDirectories() map[string]string {
 
 // UpdateState implements the Alertmanager service.
 func (am *MultitenantAlertmanager) ReadState(ctx context.Context, req *alertmanagerpb.ReadStateRequest) (*alertmanagerpb.ReadStateResponse, error) {
-	userID, err := tenant.TenantID(ctx)
+	tenantIDs, err := tenant.TenantIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
+	userID := tenant.JoinTenantIDs(tenantIDs)
 
 	am.alertmanagersMtx.Lock()
 	userAM, ok := am.alertmanagers[userID]
