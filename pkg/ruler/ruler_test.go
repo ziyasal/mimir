@@ -36,9 +36,7 @@ import (
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/notifier"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/promql"
-	promRules "github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,6 +45,8 @@ import (
 
 	"github.com/grafana/mimir/pkg/chunk"
 	"github.com/grafana/mimir/pkg/mimirpb"
+	"github.com/grafana/mimir/pkg/ruler/rulefmt"
+	"github.com/grafana/mimir/pkg/ruler/rules"
 	"github.com/grafana/mimir/pkg/ruler/rulespb"
 	"github.com/grafana/mimir/pkg/ruler/rulestore"
 	"github.com/grafana/mimir/pkg/ruler/rulestore/objectclient"
@@ -184,7 +184,7 @@ func newMockClientsPool(cfg Config, logger log.Logger, reg prometheus.Registerer
 
 func buildRuler(t *testing.T, cfg Config, rulerAddrMap map[string]*Ruler) (*Ruler, func()) {
 	engine, noopQueryable, pusher, logger, overrides, cleanup := testSetup(t, cfg)
-	storage, err := NewLegacyRuleStore(cfg.StoreConfig, promRules.FileLoader{}, log.NewNopLogger())
+	storage, err := NewLegacyRuleStore(cfg.StoreConfig, rules.FileLoader{}, log.NewNopLogger())
 	require.NoError(t, err)
 
 	reg := prometheus.NewRegistry()
@@ -1116,11 +1116,11 @@ func (s senderFunc) Send(alerts ...*notifier.Alert) {
 
 func TestSendAlerts(t *testing.T) {
 	testCases := []struct {
-		in  []*promRules.Alert
+		in  []*rules.Alert
 		exp []*notifier.Alert
 	}{
 		{
-			in: []*promRules.Alert{
+			in: []*rules.Alert{
 				{
 					Labels:      []labels.Label{{Name: "l1", Value: "v1"}},
 					Annotations: []labels.Label{{Name: "a2", Value: "v2"}},
@@ -1140,7 +1140,7 @@ func TestSendAlerts(t *testing.T) {
 			},
 		},
 		{
-			in: []*promRules.Alert{
+			in: []*rules.Alert{
 				{
 					Labels:      []labels.Label{{Name: "l1", Value: "v1"}},
 					Annotations: []labels.Label{{Name: "a2", Value: "v2"}},
@@ -1160,7 +1160,7 @@ func TestSendAlerts(t *testing.T) {
 			},
 		},
 		{
-			in: []*promRules.Alert{},
+			in: []*rules.Alert{},
 		},
 	}
 

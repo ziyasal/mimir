@@ -19,14 +19,13 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/user"
 
 	"github.com/grafana/mimir/pkg/mimirpb"
 	"github.com/grafana/mimir/pkg/querier"
-	"github.com/grafana/mimir/pkg/tenant"
+	"github.com/grafana/mimir/pkg/ruler/rules"
 	util_log "github.com/grafana/mimir/pkg/util/log"
 )
 
@@ -42,7 +41,7 @@ type PusherAppender struct {
 	ctx             context.Context
 	pusher          Pusher
 	labels          []labels.Labels
-	samples         map[string][]mimirpb.Sample
+	samples         []mimirpb.Sample
 	userID          string
 	evaluationDelay time.Duration
 }
@@ -62,17 +61,7 @@ func (a *PusherAppender) Append(_ uint64, l labels.Labels, t int64, v float64) (
 		t -= a.evaluationDelay.Milliseconds()
 	}
 
-	userID := a.userID
-	if tenant.IsCompositeTenantID(userID) {
-		userIDs, err := tenant.TenantIDsFromOrgID(userID)
-		if err != nil {
-			return 0, err
-		}
-		// Mod the hash of the series so same series always goes to same subtenant
-		i := int(l.Copy().Hash()) % len(userIDs)
-		userID = userIDs[i]
-	}
-	a.samples[userID] = append(a.samples[userID], mimirpb.Sample{
+	a.samples = append(a.samples, mimirpb.Sample{
 		TimestampMs: t,
 		Value:       v,
 	})
@@ -88,26 +77,25 @@ func (a *PusherAppender) Commit() error {
 
 	// Since a.pusher is distributor, client.ReuseSlice will be called in a.pusher.Push.
 	// We shouldn't call client.ReuseSlice here.
-	var err error
-	for userID, samples := range a.samples {
-		_, err = a.pusher.Push(user.InjectOrgID(a.ctx, userID), mimirpb.ToWriteRequest(a.labels, samples, nil, mimirpb.RULE))
+	// I think we can just rely on the provided ctx to the constructor here since that logic is now in the group eval
+	// I really don't understand why this was ever injecting on top of an already existing context but what the fuck do i know
+	_, err := a.pusher.Push(a.ctx, mimirpb.ToWriteRequest(a.labels, a.samples, nil, mimirpb.RULE))
 
-		if err != nil {
-			// Don't report errors that ended with 4xx HTTP status code (series limits, duplicate samples, out of order, etc.)
-			if resp, ok := httpgrpc.HTTPResponseFromError(err); !ok || resp.Code/100 != 4 {
-				a.failedWrites.Inc()
-			}
+	if err != nil {
+		// Don't report errors that ended with 4xx HTTP status code (series limits, duplicate samples, out of order, etc.)
+		if resp, ok := httpgrpc.HTTPResponseFromError(err); !ok || resp.Code/100 != 4 {
+			a.failedWrites.Inc()
 		}
 	}
 
 	a.labels = nil
-	a.samples = map[string][]mimirpb.Sample{}
+	a.samples = nil
 	return err
 }
 
 func (a *PusherAppender) Rollback() error {
 	a.labels = nil
-	a.samples = map[string][]mimirpb.Sample{}
+	a.samples = nil
 	return nil
 }
 
@@ -141,7 +129,6 @@ func (t *PusherAppendable) Appender(ctx context.Context) storage.Appender {
 		pusher:          t.pusher,
 		userID:          t.userID,
 		evaluationDelay: t.rulesLimits.EvaluationDelay(t.userID),
-		samples:         map[string][]mimirpb.Sample{},
 	}
 }
 

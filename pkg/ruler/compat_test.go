@@ -24,7 +24,6 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/grafana/mimir/pkg/mimirpb"
-	"github.com/grafana/mimir/pkg/tenant"
 )
 
 type fakePusher struct {
@@ -34,17 +33,13 @@ type fakePusher struct {
 }
 
 func (p *fakePusher) Push(ctx context.Context, r *mimirpb.WriteRequest) (*mimirpb.WriteResponse, error) {
-	_, err := tenant.TenantID(ctx)
-	if err != nil {
-		return nil, err
-	}
 	p.request = r
 	return p.response, p.err
 }
 
 func TestPusherAppendable(t *testing.T) {
 	pusher := &fakePusher{}
-	pa := NewPusherAppendable(pusher, "1|2|3|4|5", nil, prometheus.NewCounter(prometheus.CounterOpts{}), prometheus.NewCounter(prometheus.CounterOpts{}))
+	pa := NewPusherAppendable(pusher, "user-1", nil, prometheus.NewCounter(prometheus.CounterOpts{}), prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	for _, tc := range []struct {
 		name       string

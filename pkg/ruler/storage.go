@@ -13,13 +13,13 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	promRules "github.com/prometheus/prometheus/rules"
 
 	"github.com/grafana/mimir/pkg/chunk"
 	"github.com/grafana/mimir/pkg/chunk/aws"
 	"github.com/grafana/mimir/pkg/chunk/azure"
 	"github.com/grafana/mimir/pkg/chunk/gcp"
 	"github.com/grafana/mimir/pkg/chunk/openstack"
+	"github.com/grafana/mimir/pkg/ruler/rules"
 	"github.com/grafana/mimir/pkg/ruler/rulestore"
 	"github.com/grafana/mimir/pkg/ruler/rulestore/bucketclient"
 	"github.com/grafana/mimir/pkg/ruler/rulestore/local"
@@ -75,13 +75,13 @@ func (cfg *RuleStoreConfig) IsDefaults() bool {
 // NewLegacyRuleStore returns a rule store backend client based on the provided cfg.
 // The client used by the function is based a legacy object store clients that shouldn't
 // be used anymore.
-func NewLegacyRuleStore(cfg RuleStoreConfig, loader promRules.GroupLoader, logger log.Logger) (rulestore.RuleStore, error) {
+func NewLegacyRuleStore(cfg RuleStoreConfig, loader rules.GroupLoader, logger log.Logger) (rulestore.RuleStore, error) {
 	if cfg.mock != nil {
 		return cfg.mock, nil
 	}
 
 	if loader == nil {
-		loader = promRules.FileLoader{}
+		loader = rules.FileLoader{}
 	}
 
 	var err error
@@ -110,7 +110,7 @@ func NewLegacyRuleStore(cfg RuleStoreConfig, loader promRules.GroupLoader, logge
 }
 
 // NewRuleStore returns a rule store backend client based on the provided cfg.
-func NewRuleStore(ctx context.Context, cfg rulestore.Config, cfgProvider bucket.TenantConfigProvider, loader promRules.GroupLoader, logger log.Logger, reg prometheus.Registerer) (rulestore.RuleStore, error) {
+func NewRuleStore(ctx context.Context, cfg rulestore.Config, cfgProvider bucket.TenantConfigProvider, loader rules.GroupLoader, logger log.Logger, reg prometheus.Registerer) (rulestore.RuleStore, error) {
 	if cfg.Backend == local.Name {
 		return local.NewLocalRulesClient(cfg.Local, loader)
 	}

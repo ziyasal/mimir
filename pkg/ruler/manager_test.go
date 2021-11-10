@@ -17,10 +17,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/notifier"
 	"github.com/prometheus/prometheus/pkg/labels"
-	promRules "github.com/prometheus/prometheus/rules"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	"github.com/grafana/mimir/pkg/ruler/rules"
 	"github.com/grafana/mimir/pkg/ruler/rulespb"
 )
 
@@ -133,6 +133,6 @@ func (m *mockRulesManager) Update(_ time.Duration, _ []string, _ labels.Labels, 
 	return nil
 }
 
-func (m *mockRulesManager) RuleGroups() []*promRules.Group {
+func (m *mockRulesManager) RuleGroups() []*rules.Group {
 	return nil
 }
