@@ -2,8 +2,6 @@ package validation
 
 import (
 	"encoding/json"
-
-	"gopkg.in/yaml.v2"
 )
 
 type (
@@ -13,16 +11,19 @@ type (
 		Metrics map[string]struct{}
 	}
 
-	// aggregatorsEncoded is used to encode/decode as json
-	aggregatorsEncoded []aggregatorEncoded
-	aggregatorEncoded  struct {
+	// AggregatorsEncoded is used to encode/decode as json
+	AggregatorsEncoded struct {
+		Aggregators []AggregatorEncoded `yaml:"aggregators" json:"aggregators"`
+	}
+
+	AggregatorEncoded struct {
 		Url     string   `yaml:"url" json:"url"`
 		Metrics []string `yaml:"metrics" json:"metrics"`
 	}
 )
 
 func (a *Aggregators) UnmarshalJSON(s []byte) error {
-	var aggsEnc aggregatorsEncoded
+	var aggsEnc AggregatorsEncoded
 
 	err := json.Unmarshal(s, &aggsEnc)
 	if err != nil {
@@ -35,7 +36,7 @@ func (a *Aggregators) UnmarshalJSON(s []byte) error {
 }
 
 func (a *Aggregators) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var aggsEnc aggregatorsEncoded
+	var aggsEnc AggregatorsEncoded
 
 	err := unmarshal(&aggsEnc)
 	if err != nil {
@@ -47,11 +48,11 @@ func (a *Aggregators) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-func (a *Aggregators) applyEncoded(aggsEnc aggregatorsEncoded) {
+func (a *Aggregators) applyEncoded(aggsEnc AggregatorsEncoded) {
 	// Reset Aggregators
 	*a = (*a)[:0]
 
-	for _, aggEnc := range aggsEnc {
+	for _, aggEnc := range aggsEnc.Aggregators {
 		aggregator := Aggregator{
 			Url:     aggEnc.Url,
 			Metrics: make(map[string]struct{}),
@@ -68,24 +69,27 @@ func (a Aggregators) MarshalJSON() ([]byte, error) {
 }
 
 func (a Aggregators) MarshalYAML() (interface{}, error) {
-	return yaml.Marshal(a.getEncoded())
+	encoded := a.getEncoded()
+	return &encoded, nil
 }
 
-func (a Aggregators) getEncoded() aggregatorsEncoded {
-	ajs := make(aggregatorsEncoded, 0, len(a))
+func (a Aggregators) getEncoded() AggregatorsEncoded {
+	aggsEnc := AggregatorsEncoded{
+		Aggregators: make([]AggregatorEncoded, 0, len(a)),
+	}
 
 	for _, aggregator := range a {
-		aj := aggregatorEncoded{
+		aggEnc := AggregatorEncoded{
 			Url:     aggregator.Url,
 			Metrics: make([]string, 0, len(aggregator.Metrics)),
 		}
 
 		for metric := range aggregator.Metrics {
-			aj.Metrics = append(aj.Metrics, metric)
+			aggEnc.Metrics = append(aggEnc.Metrics, metric)
 		}
 
-		ajs = append(ajs, aj)
+		aggsEnc.Aggregators = append(aggsEnc.Aggregators, aggEnc)
 	}
 
-	return ajs
+	return aggsEnc
 }
