@@ -659,10 +659,11 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 		}
 	}
 
-	aggregations := d.limits.Aggregations(userID)
+	aggregators := d.limits.Aggregations(userID)
+	fmt.Printf("Got aggregators: %+v\n", aggregators)
 	var aggregatorMapping [][]mimirpb.PreallocTimeseries
-	if aggregations != nil {
-		aggregatorMapping = make([][]mimirpb.PreallocTimeseries, len(aggregations))
+	if aggregators != nil {
+		aggregatorMapping = make([][]mimirpb.PreallocTimeseries, len(aggregators))
 	}
 
 	latestSampleTimestampMs := int64(0)
@@ -734,9 +735,10 @@ outer:
 
 		// Metricname of "ts" has already been validated
 		metricName, _ := extract.UnsafeMetricNameFromLabelAdapters(ts.Labels)
-		for aggregatorIdx, aggregator := range aggregations {
+		for aggregatorIdx, aggregator := range aggregators {
 			_, ok := aggregator.Metrics[metricName]
 			if ok {
+				fmt.Printf("metric %s matches aggregator\n", metricName)
 				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], ts)
 				continue outer
 			}
@@ -805,7 +807,9 @@ outer:
 		if len(ts) == 0 {
 			continue
 		}
-		aggregatorChs[aggregatorIdx] = d.sendToAggregator(localCtx, aggregations[aggregatorIdx].Url, ts)
+
+		fmt.Printf("sending samples to aggregator %d\n", aggregatorIdx)
+		aggregatorChs[aggregatorIdx] = d.sendToAggregator(localCtx, aggregators[aggregatorIdx].Url, ts)
 	}
 
 	keys := append(seriesKeys, metadataKeys...)
