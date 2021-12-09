@@ -739,7 +739,7 @@ outer:
 		for aggregatorIdx, aggregator := range aggregators {
 			_, ok := aggregator.Metrics[metricName]
 			if ok {
-				fmt.Printf("metric %s matches aggregator\n", metricName)
+				fmt.Printf("metric %s matches aggregator with %d samples\n", metricName, len(ts.Samples))
 				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], ts)
 				continue outer
 			}
@@ -806,6 +806,7 @@ outer:
 	aggregatorChs := make([]chan error, len(aggregatorMapping))
 	for aggregatorIdx, ts := range aggregatorMapping {
 		if len(ts) == 0 {
+			fmt.Println("not sending samples, because len()==0")
 			continue
 		}
 
