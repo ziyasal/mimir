@@ -2,7 +2,6 @@ package validation
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -78,7 +77,6 @@ func TestEncodingDecodingAggregators(t *testing.T) {
 			encoded, err := yaml.Marshal(testCase)
 			require.NoError(t, err)
 
-			fmt.Println(encoded)
 			var decoded Aggregators
 			err = yaml.Unmarshal(encoded, &decoded)
 			require.NoError(t, err)

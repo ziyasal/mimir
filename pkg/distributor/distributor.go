@@ -803,7 +803,6 @@ outer:
 	aggregatorChs := make([]chan error, len(aggregatorMapping))
 	for aggregatorIdx, ts := range aggregatorMapping {
 		if len(ts) == 0 {
-			close(aggregatorChs[aggregatorIdx])
 			continue
 		}
 		aggregatorChs[aggregatorIdx] = d.sendToAggregator(localCtx, aggregations[aggregatorIdx].Url, ts)
@@ -841,6 +840,10 @@ outer:
 
 	// Wait for sending to aggregators to complete
 	for aggregatorIdx := range aggregatorChs {
+		if aggregatorChs[aggregatorIdx] == nil {
+			continue
+		}
+
 		err := <-aggregatorChs[aggregatorIdx]
 		if err != nil {
 			if firstPartialErr == nil {
