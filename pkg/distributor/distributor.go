@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/golang/snappy"
 	"github.com/grafana/dskit/limiter"
 	"github.com/grafana/dskit/ring"
 	ring_client "github.com/grafana/dskit/ring/client"
@@ -900,7 +901,7 @@ func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseri
 			return
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, "POST", url, snappy.Encode(bytes.NewReader(body)))
 		if err != nil {
 			errCh <- err
 			return
