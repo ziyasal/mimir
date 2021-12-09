@@ -6,7 +6,9 @@
 package distributor
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -657,6 +659,12 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 		}
 	}
 
+	aggregations := d.limits.Aggregations(userID)
+	var aggregatorMapping [][]mimirpb.PreallocTimeseries
+	if aggregations != nil {
+		aggregatorMapping = make([][]mimirpb.PreallocTimeseries, len(aggregations))
+	}
+
 	latestSampleTimestampMs := int64(0)
 	defer func() {
 		// Update this metric even in case of errors.
@@ -667,6 +675,7 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 
 	// For each timeseries, compute a hash to distribute across ingesters;
 	// check each sample and discard if outside limits.
+outer:
 	for _, ts := range req.Timeseries {
 		// Use timestamp of latest sample in the series. If samples for series are not ordered, metric for user may be wrong.
 		if len(ts.Samples) > 0 {
@@ -721,6 +730,16 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 				firstPartialErr = httpgrpc.Errorf(http.StatusBadRequest, validationErr.Error())
 			}
 			continue
+		}
+
+		// Metricname of "ts" has already been validated
+		metricName, _ := extract.UnsafeMetricNameFromLabelAdapters(ts.Labels)
+		for aggregatorIdx, aggregator := range aggregations {
+			_, ok := aggregator.Metrics[metricName]
+			if ok {
+				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], ts)
+				continue outer
+			}
 		}
 
 		seriesKeys = append(seriesKeys, key)
@@ -781,6 +800,15 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 		localCtx = opentracing.ContextWithSpan(localCtx, sp)
 	}
 
+	aggregatorChs := make([]chan error, len(aggregatorMapping))
+	for aggregatorIdx, ts := range aggregatorMapping {
+		if len(ts) == 0 {
+			close(aggregatorChs[aggregatorIdx])
+			continue
+		}
+		aggregatorChs[aggregatorIdx] = d.sendToAggregator(localCtx, aggregations[aggregatorIdx].Url, ts)
+	}
+
 	keys := append(seriesKeys, metadataKeys...)
 	initialMetadataIndex := len(seriesKeys)
 
@@ -810,6 +838,18 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 	if err != nil {
 		return nil, err
 	}
+
+	// Wait for sending to aggregators to complete
+	for aggregatorIdx := range aggregatorChs {
+		err := <-aggregatorChs[aggregatorIdx]
+		if err != nil {
+			if firstPartialErr == nil {
+				firstPartialErr = err
+			}
+			continue
+		}
+	}
+
 	return &mimirpb.WriteResponse{}, firstPartialErr
 }
 
@@ -837,6 +877,44 @@ func sortLabelsIfNeeded(labels []mimirpb.LabelAdapter) {
 	sort.Slice(labels, func(i, j int) bool {
 		return labels[i].Name < labels[j].Name
 	})
+}
+
+func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseries []mimirpb.PreallocTimeseries) chan error {
+	errCh := make(chan error, 1)
+
+	go func() {
+		defer close(errCh)
+
+		body, err := json.Marshal(mimirpb.WriteRequest{
+			Timeseries: timeseries,
+		})
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		if resp.StatusCode/100 != 2 {
+			errCh <- fmt.Errorf("unexpected status code %d (%s)", resp.StatusCode, resp.Body)
+			return
+		}
+
+		return
+	}()
+
+	return errCh
 }
 
 func (d *Distributor) send(ctx context.Context, ingester ring.InstanceDesc, timeseries []mimirpb.PreallocTimeseries, metadata []*mimirpb.MetricMetadata, source mimirpb.WriteRequest_SourceEnum) error {

@@ -130,6 +130,8 @@ type Limits struct {
 	AlertmanagerMaxDispatcherAggregationGroups int `yaml:"alertmanager_max_dispatcher_aggregation_groups" json:"alertmanager_max_dispatcher_aggregation_groups"`
 	AlertmanagerMaxAlertsCount                 int `yaml:"alertmanager_max_alerts_count" json:"alertmanager_max_alerts_count"`
 	AlertmanagerMaxAlertsSizeBytes             int `yaml:"alertmanager_max_alerts_size_bytes" json:"alertmanager_max_alerts_size_bytes"`
+
+	Aggregators Aggregators `yaml:"aggregators" json:"aggregators"`
 }
 
 // RegisterFlags adds the flags required to config this to the given FlagSet
@@ -627,6 +629,12 @@ func (o *Overrides) AlertmanagerReceiversBlockCIDRNetworks(user string) []flagex
 // in the Alertmanager receivers for the given user.
 func (o *Overrides) AlertmanagerReceiversBlockPrivateAddresses(user string) bool {
 	return o.getOverridesForUser(user).AlertmanagerReceiversBlockPrivateAddresses
+}
+
+// AlertmanagerReceiversBlockPrivateAddresses returns true if private addresses should be blocked
+// in the Alertmanager receivers for the given user.
+func (o *Overrides) Aggregations(user string) Aggregators {
+	return o.getOverridesForUser(user).Aggregators
 }
 
 // Notification limits are special. Limits are returned in following order:
