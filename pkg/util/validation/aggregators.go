@@ -2,6 +2,8 @@ package validation
 
 import (
 	"encoding/json"
+
+	"gopkg.in/yaml.v2"
 )
 
 type (
@@ -11,44 +13,69 @@ type (
 		Metrics map[string]struct{}
 	}
 
-	// aggregatorsJson is used to encode/decode as json
-	aggregatorsJson []aggregatorJson
-	aggregatorJson  struct {
-		Url     string   `json:"url"`
-		Metrics []string `json:"metrics"`
+	// aggregatorsEncoded is used to encode/decode as json
+	aggregatorsEncoded []aggregatorEncoded
+	aggregatorEncoded  struct {
+		Url     string   `yaml:"url" json:"url"`
+		Metrics []string `yaml:"metrics" json:"metrics"`
 	}
 )
 
 func (a *Aggregators) UnmarshalJSON(s []byte) error {
-	var ajs aggregatorsJson
+	var aggsEnc aggregatorsEncoded
 
-	err := json.Unmarshal(s, &ajs)
+	err := json.Unmarshal(s, &aggsEnc)
 	if err != nil {
 		return err
 	}
 
-	// Reset Aggregators
-	*a = (*a)[:0]
-
-	for _, aj := range ajs {
-		aggregator := Aggregator{
-			Url:     aj.Url,
-			Metrics: make(map[string]struct{}),
-		}
-		for _, metric := range aj.Metrics {
-			aggregator.Metrics[metric] = struct{}{}
-		}
-		*a = append(*a, aggregator)
-	}
+	a.applyEncoded(aggsEnc)
 
 	return nil
 }
 
-func (a Aggregators) MarshalJson(s []byte) ([]byte, error) {
-	ajs := make(aggregatorsJson, 0, len(a))
+func (a *Aggregators) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var aggsEnc aggregatorsEncoded
+
+	err := unmarshal(&aggsEnc)
+	if err != nil {
+		return err
+	}
+
+	a.applyEncoded(aggsEnc)
+
+	return nil
+}
+
+func (a *Aggregators) applyEncoded(aggsEnc aggregatorsEncoded) {
+	// Reset Aggregators
+	*a = (*a)[:0]
+
+	for _, aggEnc := range aggsEnc {
+		aggregator := Aggregator{
+			Url:     aggEnc.Url,
+			Metrics: make(map[string]struct{}),
+		}
+		for _, metric := range aggEnc.Metrics {
+			aggregator.Metrics[metric] = struct{}{}
+		}
+		*a = append(*a, aggregator)
+	}
+}
+
+func (a Aggregators) MarshalJSON() ([]byte, error) {
+	return json.Marshal(a.getEncoded())
+}
+
+func (a Aggregators) MarshalYAML() (interface{}, error) {
+	return yaml.Marshal(a.getEncoded())
+}
+
+func (a Aggregators) getEncoded() aggregatorsEncoded {
+	ajs := make(aggregatorsEncoded, 0, len(a))
 
 	for _, aggregator := range a {
-		aj := aggregatorJson{
+		aj := aggregatorEncoded{
 			Url:     aggregator.Url,
 			Metrics: make([]string, 0, len(aggregator.Metrics)),
 		}
@@ -60,5 +87,5 @@ func (a Aggregators) MarshalJson(s []byte) ([]byte, error) {
 		ajs = append(ajs, aj)
 	}
 
-	return json.Marshal(ajs)
+	return ajs
 }
