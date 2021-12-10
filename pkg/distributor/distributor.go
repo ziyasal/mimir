@@ -769,6 +769,17 @@ outer:
 	d.receivedExemplars.WithLabelValues(userID).Add((float64(validatedExemplars)))
 	d.receivedMetadata.WithLabelValues(userID).Add(float64(len(validatedMetadata)))
 
+	aggregatorChs := make([]chan error, len(aggregatorMapping))
+	for aggregatorIdx, ts := range aggregatorMapping {
+		if len(ts) == 0 {
+			fmt.Println("not sending samples, because len()==0")
+			continue
+		}
+
+		fmt.Printf("sending samples to aggregator %d\n", aggregatorIdx)
+		aggregatorChs[aggregatorIdx] = d.sendToAggregator(context.Background(), aggregators[aggregatorIdx].Url, ts)
+	}
+
 	if len(seriesKeys) == 0 && len(metadataKeys) == 0 {
 		return &mimirpb.WriteResponse{}, firstPartialErr
 	}
@@ -801,17 +812,6 @@ outer:
 	localCtx = util.AddSourceIPsToOutgoingContext(localCtx, source)
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
 		localCtx = opentracing.ContextWithSpan(localCtx, sp)
-	}
-
-	aggregatorChs := make([]chan error, len(aggregatorMapping))
-	for aggregatorIdx, ts := range aggregatorMapping {
-		if len(ts) == 0 {
-			fmt.Println("not sending samples, because len()==0")
-			continue
-		}
-
-		fmt.Printf("sending samples to aggregator %d\n", aggregatorIdx)
-		aggregatorChs[aggregatorIdx] = d.sendToAggregator(localCtx, aggregators[aggregatorIdx].Url, ts)
 	}
 
 	keys := append(seriesKeys, metadataKeys...)
