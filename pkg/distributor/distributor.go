@@ -902,7 +902,7 @@ func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseri
 			return
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", url, snappy.Encode(bytes.NewReader(body)))
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(snappy.Encode(nil, body)))
 		if err != nil {
 			errCh <- err
 			return
@@ -919,8 +919,6 @@ func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseri
 			errCh <- fmt.Errorf("unexpected status code %d (%s)", resp.StatusCode, resp.Body)
 			return
 		}
-
-		return
 	}()
 
 	return errCh
