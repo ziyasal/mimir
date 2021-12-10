@@ -739,6 +739,7 @@ outer:
 		for aggregatorIdx, aggregator := range aggregators {
 			_, ok := aggregator.Metrics[metricName]
 			if ok {
+				fmt.Printf("append ts to aggregator %s: %+v\n", aggregator.Url, ts)
 				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], ts)
 				continue outer
 			}
