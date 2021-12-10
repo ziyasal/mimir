@@ -742,8 +742,10 @@ outer:
 		for aggregatorIdx, aggregator := range aggregators {
 			_, ok := aggregator.Metrics[metricName]
 			if ok {
-				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], prompbTimeserieFromMimirpb(ts))
-				continue outer
+				if len(ts.Samples) > 0 {
+					aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], prompbTimeserieFromMimirpb(ts))
+					continue outer
+				}
 			}
 		}
 
@@ -768,8 +770,6 @@ outer:
 	d.receivedSamples.WithLabelValues(userID).Add(float64(validatedSamples))
 	d.receivedExemplars.WithLabelValues(userID).Add((float64(validatedExemplars)))
 	d.receivedMetadata.WithLabelValues(userID).Add(float64(len(validatedMetadata)))
-
-	fmt.Printf("sending to aggregators mapping: %+v\n", aggregatorMapping)
 
 	aggregatorChs := make([]chan error, len(aggregatorMapping))
 	for aggregatorIdx, ts := range aggregatorMapping {
@@ -945,6 +945,8 @@ func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseri
 			errCh <- err
 			return
 		}
+
+		fmt.Printf("got response from aggregator: %+v\n", resp)
 
 		if resp.StatusCode/100 != 2 {
 			errCh <- fmt.Errorf("unexpected status code %d (%s)", resp.StatusCode, resp.Body)
