@@ -662,9 +662,9 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 	}
 
 	aggregators := d.limits.Aggregations(userID)
-	var aggregatorMapping [][]mimirpb.PreallocTimeseries
+	var aggregatorMapping [][]prompb.TimeSeries
 	if aggregators != nil {
-		aggregatorMapping = make([][]mimirpb.PreallocTimeseries, len(aggregators))
+		aggregatorMapping = make([][]prompb.TimeSeries, len(aggregators))
 	}
 
 	latestSampleTimestampMs := int64(0)
@@ -734,21 +734,21 @@ outer:
 			continue
 		}
 
+		validatedSamples += len(ts.Samples)
+		validatedExemplars += len(ts.Exemplars)
+
 		// Metricname of "ts" has already been validated
 		metricName, _ := extract.UnsafeMetricNameFromLabelAdapters(ts.Labels)
 		for aggregatorIdx, aggregator := range aggregators {
 			_, ok := aggregator.Metrics[metricName]
 			if ok {
-				fmt.Printf("append ts to aggregator %s: %+v\n", aggregator.Url, ts)
-				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], ts)
+				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], prompbTimeserieFromMimirpb(ts))
 				continue outer
 			}
 		}
 
 		seriesKeys = append(seriesKeys, key)
 		validatedTimeseries = append(validatedTimeseries, ts)
-		validatedSamples += len(ts.Samples)
-		validatedExemplars += len(ts.Exemplars)
 	}
 
 	for _, m := range req.Metadata {
@@ -768,6 +768,8 @@ outer:
 	d.receivedSamples.WithLabelValues(userID).Add(float64(validatedSamples))
 	d.receivedExemplars.WithLabelValues(userID).Add((float64(validatedExemplars)))
 	d.receivedMetadata.WithLabelValues(userID).Add(float64(len(validatedMetadata)))
+
+	fmt.Printf("sending to aggregators mapping: %+v\n", aggregatorMapping)
 
 	aggregatorChs := make([]chan error, len(aggregatorMapping))
 	for aggregatorIdx, ts := range aggregatorMapping {
@@ -886,46 +888,39 @@ func sortLabelsIfNeeded(labels []mimirpb.LabelAdapter) {
 	})
 }
 
-func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseries []mimirpb.PreallocTimeseries) chan error {
+func prompbTimeserieFromMimirpb(timeserie mimirpb.PreallocTimeseries) prompb.TimeSeries {
+	labels := make([]prompb.Label, 0, len(timeserie.Labels))
+	for _, label := range timeserie.Labels {
+		labels = append(labels, prompb.Label{
+			Name:  copyString(label.Name),
+			Value: copyString(label.Value),
+		})
+	}
+
+	samples := make([]prompb.Sample, 0, len(timeserie.Samples))
+	for _, sample := range timeserie.Samples {
+		samples = append(samples, prompb.Sample{
+			Value:     sample.Value,
+			Timestamp: sample.TimestampMs,
+		})
+	}
+
+	return prompb.TimeSeries{
+		Labels:  labels,
+		Samples: samples,
+	}
+}
+
+func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseries []prompb.TimeSeries) chan error {
 	errCh := make(chan error, 1)
 
 	go func() {
 		defer close(errCh)
 
-		var sampleCount int
-		metricsMap := make(map[string]struct{})
-		for _, t := range timeseries {
-			sampleCount += len(t.Samples)
-			metricsMap[util.LabelsToMetric(mimirpb.FromLabelAdaptersToLabels(t.Labels)).String()] = struct{}{}
-		}
-		metrics := make([]string, 0, len(metricsMap))
-		for metric := range metricsMap {
-			metrics = append(metrics, metric)
-		}
-		fmt.Printf("sending %d samples to to aggregator %s (%+v)\n", sampleCount, url, metrics)
+		fmt.Printf("sending to aggregator %s timeseries: %+v\n", url, timeseries)
 
-		prompbReq := prompb.WriteRequest{}
-		for _, timeserie := range timeseries {
-			var labels []prompb.Label
-			for _, label := range timeserie.Labels {
-				labels = append(labels, prompb.Label{
-					Name:  copyString(label.Name),
-					Value: copyString(label.Value),
-				})
-			}
-
-			var samples []prompb.Sample
-			for _, sample := range timeserie.Samples {
-				samples = append(samples, prompb.Sample{
-					Value:     sample.Value,
-					Timestamp: sample.TimestampMs,
-				})
-			}
-
-			prompbReq.Timeseries = append(prompbReq.Timeseries, prompb.TimeSeries{
-				Labels:  labels,
-				Samples: samples,
-			})
+		prompbReq := prompb.WriteRequest{
+			Timeseries: timeseries,
 		}
 
 		protoReq, err := proto.Marshal(&prompbReq)
