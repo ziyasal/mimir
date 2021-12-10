@@ -8,7 +8,6 @@ package distributor
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/grafana/dskit/limiter"
 	"github.com/grafana/dskit/ring"
@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/instrument"
@@ -661,7 +662,6 @@ func (d *Distributor) PushWithCleanup(ctx context.Context, req *mimirpb.WriteReq
 	}
 
 	aggregators := d.limits.Aggregations(userID)
-	fmt.Printf("Got aggregators: %+v\n", aggregators)
 	var aggregatorMapping [][]mimirpb.PreallocTimeseries
 	if aggregators != nil {
 		aggregatorMapping = make([][]mimirpb.PreallocTimeseries, len(aggregators))
@@ -739,7 +739,6 @@ outer:
 		for aggregatorIdx, aggregator := range aggregators {
 			_, ok := aggregator.Metrics[metricName]
 			if ok {
-				fmt.Printf("metric %s matches aggregator with %d samples\n", metricName, len(ts.Samples))
 				aggregatorMapping[aggregatorIdx] = append(aggregatorMapping[aggregatorIdx], ts)
 				continue outer
 			}
@@ -772,11 +771,9 @@ outer:
 	aggregatorChs := make([]chan error, len(aggregatorMapping))
 	for aggregatorIdx, ts := range aggregatorMapping {
 		if len(ts) == 0 {
-			fmt.Println("not sending samples, because len()==0")
 			continue
 		}
 
-		fmt.Printf("sending samples to aggregator %d\n", aggregatorIdx)
 		aggregatorChs[aggregatorIdx] = d.sendToAggregator(context.Background(), aggregators[aggregatorIdx].Url, ts)
 	}
 
@@ -894,22 +891,60 @@ func (d *Distributor) sendToAggregator(ctx context.Context, url string, timeseri
 	go func() {
 		defer close(errCh)
 
-		body, err := json.Marshal(mimirpb.WriteRequest{
-			Timeseries: timeseries,
-		})
+		var sampleCount int
+		metricsMap := make(map[string]struct{})
+		for _, t := range timeseries {
+			sampleCount += len(t.Samples)
+			metricsMap[util.LabelsToMetric(mimirpb.FromLabelAdaptersToLabels(t.Labels)).String()] = struct{}{}
+		}
+		metrics := make([]string, 0, len(metricsMap))
+		for metric := range metricsMap {
+			metrics = append(metrics, metric)
+		}
+		fmt.Printf("sending %d samples to to aggregator %s (%+v)\n", sampleCount, url, metrics)
+
+		prompbReq := prompb.WriteRequest{}
+		for _, timeserie := range timeseries {
+			var labels []prompb.Label
+			for _, label := range timeserie.Labels {
+				labels = append(labels, prompb.Label{
+					Name:  copyString(label.Name),
+					Value: copyString(label.Value),
+				})
+			}
+
+			var samples []prompb.Sample
+			for _, sample := range timeserie.Samples {
+				samples = append(samples, prompb.Sample{
+					Value:     sample.Value,
+					Timestamp: sample.TimestampMs,
+				})
+			}
+
+			prompbReq.Timeseries = append(prompbReq.Timeseries, prompb.TimeSeries{
+				Labels:  labels,
+				Samples: samples,
+			})
+		}
+
+		protoReq, err := proto.Marshal(&prompbReq)
 		if err != nil {
 			errCh <- err
 			return
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(snappy.Encode(nil, body)))
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(snappy.Encode(nil, protoReq)))
 		if err != nil {
 			errCh <- err
 			return
 		}
+
+		httpReq.Header.Add("Content-Encoding", "snappy")
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		httpReq.Header.Set("User-Agent", "Mimir Distributor")
 
 		client := &http.Client{}
-		resp, err := client.Do(req)
+		resp, err := client.Do(httpReq)
 		if err != nil {
 			errCh <- err
 			return
