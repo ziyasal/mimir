@@ -95,7 +95,6 @@ message QueryResponse {
 // QueryStreamResponse contains a batch of timeseries chunks or timeseries. Only one of these series will be populated.
 message QueryStreamResponse {
   repeated TimeSeriesChunk chunkseries = 1 [(gogoproto.nullable) = false];
-  repeated cortexpb.TimeSeries timeseries = 2 [(gogoproto.nullable) = false];
 }
 
 message ExemplarQueryResponse {

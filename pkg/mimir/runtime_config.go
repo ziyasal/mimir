@@ -31,8 +31,6 @@ type runtimeConfigValues struct {
 
 	Multi kv.MultiRuntimeConfig `yaml:"multi_kv_config"`
 
-	IngesterChunkStreaming *bool `yaml:"ingester_stream_chunks_when_using_blocks"`
-
 	IngesterLimits *ingester.InstanceLimits `yaml:"ingester_limits"`
 }
 
@@ -106,28 +104,6 @@ func multiClientRuntimeConfigChannel(manager *runtimeconfig.Manager) func() <-ch
 		}()
 
 		return outCh
-	}
-}
-
-func ingesterChunkStreaming(manager *runtimeconfig.Manager) func() ingester.QueryStreamType {
-	if manager == nil {
-		return nil
-	}
-
-	return func() ingester.QueryStreamType {
-		val := manager.GetConfig()
-		if cfg, ok := val.(*runtimeConfigValues); ok && cfg != nil {
-			if cfg.IngesterChunkStreaming == nil {
-				return ingester.QueryStreamDefault
-			}
-
-			if *cfg.IngesterChunkStreaming {
-				return ingester.QueryStreamChunks
-			}
-			return ingester.QueryStreamSamples
-		}
-
-		return ingester.QueryStreamDefault
 	}
 }
 

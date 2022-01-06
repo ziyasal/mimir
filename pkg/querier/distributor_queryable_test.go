@@ -200,16 +200,6 @@ func TestIngesterStreamingMixedResults(t *testing.T) {
 		{Value: 5.5, TimestampMs: 5500},
 	}
 
-	mergedSamplesS1S2 := []mimirpb.Sample{
-		{Value: 1, TimestampMs: 1000},
-		{Value: 2, TimestampMs: 2000},
-		{Value: 2.5, TimestampMs: 2500},
-		{Value: 3, TimestampMs: 3000},
-		{Value: 4, TimestampMs: 4000},
-		{Value: 5, TimestampMs: 5000},
-		{Value: 5.5, TimestampMs: 5500},
-	}
-
 	d := &mockDistributor{}
 	d.On("QueryStream", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
 		&client.QueryStreamResponse{
@@ -220,18 +210,7 @@ func TestIngesterStreamingMixedResults(t *testing.T) {
 				},
 				{
 					Labels: []mimirpb.LabelAdapter{{Name: labels.MetricName, Value: "two"}},
-					Chunks: convertToChunks(t, s1),
-				},
-			},
-
-			Timeseries: []mimirpb.TimeSeries{
-				{
-					Labels:  []mimirpb.LabelAdapter{{Name: labels.MetricName, Value: "two"}},
-					Samples: s2,
-				},
-				{
-					Labels:  []mimirpb.LabelAdapter{{Name: labels.MetricName, Value: "three"}},
-					Samples: s1,
+					Chunks: convertToChunks(t, s2),
 				},
 			},
 		},
@@ -249,10 +228,7 @@ func TestIngesterStreamingMixedResults(t *testing.T) {
 	verifySeries(t, seriesSet.At(), labels.Labels{{Name: labels.MetricName, Value: "one"}}, s1)
 
 	require.True(t, seriesSet.Next())
-	verifySeries(t, seriesSet.At(), labels.Labels{{Name: labels.MetricName, Value: "three"}}, s1)
-
-	require.True(t, seriesSet.Next())
-	verifySeries(t, seriesSet.At(), labels.Labels{{Name: labels.MetricName, Value: "two"}}, mergedSamplesS1S2)
+	verifySeries(t, seriesSet.At(), labels.Labels{{Name: labels.MetricName, Value: "two"}}, s2)
 
 	require.False(t, seriesSet.Next())
 	require.NoError(t, seriesSet.Err())

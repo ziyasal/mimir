@@ -1449,30 +1449,8 @@ func (i *Ingester) QueryStream(req *client.QueryRequest, stream client.Ingester_
 	numSamples := 0
 	numSeries := 0
 
-	streamType := QueryStreamSamples
-	if i.cfg.StreamChunksWhenUsingBlocks {
-		streamType = QueryStreamChunks
-	}
-
-	if i.cfg.StreamTypeFn != nil {
-		runtimeType := i.cfg.StreamTypeFn()
-		switch runtimeType {
-		case QueryStreamChunks:
-			streamType = QueryStreamChunks
-		case QueryStreamSamples:
-			streamType = QueryStreamSamples
-		default:
-			// no change from config value.
-		}
-	}
-
-	if streamType == QueryStreamChunks {
-		level.Debug(spanlog).Log("msg", "using queryStreamChunks")
-		numSeries, numSamples, err = i.queryStreamChunks(ctx, db, int64(from), int64(through), matchers, shard, stream)
-	} else {
-		level.Debug(spanlog).Log("msg", "using queryStreamSamples")
-		numSeries, numSamples, err = i.queryStreamSamples(ctx, db, int64(from), int64(through), matchers, shard, stream)
-	}
+	level.Debug(spanlog).Log("msg", "using queryStreamChunks")
+	numSeries, numSamples, err = i.queryStreamChunks(ctx, db, int64(from), int64(through), matchers, shard, stream)
 	if err != nil {
 		return err
 	}
@@ -1481,79 +1459,6 @@ func (i *Ingester) QueryStream(req *client.QueryRequest, stream client.Ingester_
 	i.metrics.queriedSamples.Observe(float64(numSamples))
 	level.Debug(spanlog).Log("series", numSeries, "samples", numSamples)
 	return nil
-}
-
-func (i *Ingester) queryStreamSamples(ctx context.Context, db *userTSDB, from, through int64, matchers []*labels.Matcher, shard *sharding.ShardSelector, stream client.Ingester_QueryStreamServer) (numSeries, numSamples int, _ error) {
-	q, err := db.Querier(ctx, from, through)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer q.Close()
-
-	var hints *storage.SelectHints
-	if shard != nil {
-		hints = configSelectHintsWithShard(initSelectHints(from, through), shard)
-	}
-
-	// It's not required to return sorted series because series are sorted by the Mimir querier.
-	ss := q.Select(false, hints, matchers...)
-	if ss.Err() != nil {
-		return 0, 0, ss.Err()
-	}
-
-	timeseries := make([]mimirpb.TimeSeries, 0, queryStreamBatchSize)
-	batchSizeBytes := 0
-	for ss.Next() {
-		series := ss.At()
-
-		// convert labels to LabelAdapter
-		ts := mimirpb.TimeSeries{
-			Labels: mimirpb.FromLabelsToLabelAdapters(series.Labels()),
-		}
-
-		it := series.Iterator()
-		for it.Next() {
-			t, v := it.At()
-			ts.Samples = append(ts.Samples, mimirpb.Sample{Value: v, TimestampMs: t})
-		}
-		numSamples += len(ts.Samples)
-		numSeries++
-		tsSize := ts.Size()
-
-		if (batchSizeBytes > 0 && batchSizeBytes+tsSize > queryStreamBatchMessageSize) || len(timeseries) >= queryStreamBatchSize {
-			// Adding this series to the batch would make it too big,
-			// flush the data and add it to new batch instead.
-			err = client.SendQueryStream(stream, &client.QueryStreamResponse{
-				Timeseries: timeseries,
-			})
-			if err != nil {
-				return 0, 0, err
-			}
-
-			batchSizeBytes = 0
-			timeseries = timeseries[:0]
-		}
-
-		timeseries = append(timeseries, ts)
-		batchSizeBytes += tsSize
-	}
-
-	// Ensure no error occurred while iterating the series set.
-	if err := ss.Err(); err != nil {
-		return 0, 0, err
-	}
-
-	// Final flush any existing metrics
-	if batchSizeBytes != 0 {
-		err = client.SendQueryStream(stream, &client.QueryStreamResponse{
-			Timeseries: timeseries,
-		})
-		if err != nil {
-			return 0, 0, err
-		}
-	}
-
-	return numSeries, numSamples, nil
 }
 
 // queryStreamChunks streams metrics from a TSDB. This implements the client.IngesterServer interface

@@ -75,7 +75,7 @@ func (d *Distributor) QueryStream(ctx context.Context, from, to model.Time, matc
 		}
 
 		if s := opentracing.SpanFromContext(ctx); s != nil {
-			s.LogKV("chunk-series", len(result.GetChunkseries()), "time-series", len(result.GetTimeseries()))
+			s.LogKV("chunk-series", len(result.GetChunkseries()))
 		}
 		return nil
 	})
@@ -228,7 +228,6 @@ func (d *Distributor) queryIngesterStream(ctx context.Context, replicationSet ri
 	)
 
 	hashToChunkseries := map[string]ingester_client.TimeSeriesChunk{}
-	hashToTimeSeries := map[string]mimirpb.TimeSeries{}
 
 	// Start reading and accumulating responses. stopReading chan will
 	// be closed when all calls to ingesters have finished.
@@ -246,19 +245,6 @@ func (d *Distributor) queryIngesterStream(ctx context.Context, replicationSet ri
 					existing.Labels = series.Labels
 					existing.Chunks = accumulateChunks(existing.Chunks, series.Chunks)
 					hashToChunkseries[key] = existing
-				}
-
-				// Accumulate any time series
-				for _, series := range response.Timeseries {
-					key := ingester_client.LabelsToKeyString(mimirpb.FromLabelAdaptersToLabels(series.Labels))
-					existing := hashToTimeSeries[key]
-					existing.Labels = series.Labels
-					if existing.Samples == nil {
-						existing.Samples = series.Samples
-					} else {
-						existing.Samples = mergeSamples(existing.Samples, series.Samples)
-					}
-					hashToTimeSeries[key] = existing
 				}
 			}
 		}
@@ -307,12 +293,6 @@ func (d *Distributor) queryIngesterStream(ctx context.Context, replicationSet ri
 				return nil, validation.LimitError(chunkBytesLimitErr.Error())
 			}
 
-			for _, series := range resp.Timeseries {
-				if limitErr := queryLimiter.AddSeries(series.Labels); limitErr != nil {
-					return nil, validation.LimitError(limitErr.Error())
-				}
-			}
-
 			// This goroutine could be left running after replicationSet.Do() returns,
 			// so check before writing to the results chan.
 			select {
@@ -333,16 +313,12 @@ func (d *Distributor) queryIngesterStream(ctx context.Context, replicationSet ri
 	// Now turn the accumulated maps into slices.
 	resp := &ingester_client.QueryStreamResponse{
 		Chunkseries: make([]ingester_client.TimeSeriesChunk, 0, len(hashToChunkseries)),
-		Timeseries:  make([]mimirpb.TimeSeries, 0, len(hashToTimeSeries)),
 	}
 	for _, series := range hashToChunkseries {
 		resp.Chunkseries = append(resp.Chunkseries, series)
 	}
-	for _, series := range hashToTimeSeries {
-		resp.Timeseries = append(resp.Timeseries, series)
-	}
 
-	reqStats.AddFetchedSeries(uint64(len(resp.Chunkseries) + len(resp.Timeseries)))
+	reqStats.AddFetchedSeries(uint64(len(resp.Chunkseries)))
 	reqStats.AddFetchedChunkBytes(uint64(resp.ChunksSize()))
 	reqStats.AddFetchedChunks(uint64(resp.ChunksCount()))
 
