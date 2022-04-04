@@ -42,7 +42,7 @@ RUN GO111MODULE=on \
 	go install github.com/fatih/faillint@v1.5.0 && \
 	go install github.com/campoy/embedmd@v1.0.0 && \
 	go install github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb@v0.4.0 && \
-	go install github.com/monitoring-mixins/mixtool/cmd/mixtool@bca3066 && \
+	go install github.com/monitoring-mixins/mixtool/cmd/mixtool@f9b73f7578b95799448ae1f9e47ac163030d1b44 && \
 	go install github.com/mikefarah/yq/v4@v4.13.4 && \
 	go install github.com/google/go-jsonnet/cmd/jsonnetfmt@v0.17.0 && \
 	rm -rf /go/pkg /go/src /root/.cache
