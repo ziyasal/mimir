@@ -122,8 +122,8 @@ fetch-build-image:
 push-multiarch-build-image:
 	@echo
 	# Build image for each platform separately... it tends to generate fewer errors.
-	$(SUDO) docker buildx build --platform linux/amd64 --build-arg=revision=$(GIT_REVISION) --build-arg=goproxyValue=$(GOPROXY_VALUE) mimir-build-image/
-	$(SUDO) docker buildx build --platform linux/arm64 --build-arg=revision=$(GIT_REVISION) --build-arg=goproxyValue=$(GOPROXY_VALUE) mimir-build-image/
+	$(SUDO) docker buildx build --platform linux/amd64 --progress=plain --build-arg=revision=$(GIT_REVISION) --build-arg=goproxyValue=$(GOPROXY_VALUE) mimir-build-image/
+	$(SUDO) docker buildx build --platform linux/arm64 --progress=plain --build-arg=revision=$(GIT_REVISION) --build-arg=goproxyValue=$(GOPROXY_VALUE) mimir-build-image/
 	# This command will run the same build as above, but it will reuse existing platform-specific images,
 	# put them together and push to registry.
 	$(SUDO) docker buildx build -o type=registry --platform linux/amd64,linux/arm64 --build-arg=revision=$(GIT_REVISION) --build-arg=goproxyValue=$(GOPROXY_VALUE) -t $(BUILD_IMAGE):$(IMAGE_TAG) mimir-build-image/
@@ -339,7 +339,7 @@ doc: clean-doc $(DOC_TEMPLATES:.template=.md) $(DOC_EMBED:.md=.md.embedmd)
 
 # Add license header to files.
 license:
-	go run ./tools/add-license ./cmd ./integration ./pkg ./tools ./development ./mimir-build-image ./operations
+	go run ./tools/add-license ./cmd ./integration ./pkg ./tools ./development ./mimir-build-image ./operations ./.github
 
 check-license: license
 	@git diff --exit-code || (echo "Please add the license header running 'make BUILD_IN_CONTAINER=false license'" && false)
