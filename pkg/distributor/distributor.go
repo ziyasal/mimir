@@ -115,8 +115,6 @@ type Distributor struct {
 	sampleDelayHistogram             prometheus.Histogram
 	ingesterAppends                  *prometheus.CounterVec
 	ingesterAppendFailures           *prometheus.CounterVec
-	ingesterQueries                  *prometheus.CounterVec
-	ingesterQueryFailures            *prometheus.CounterVec
 	replicationFactor                prometheus.Gauge
 	latestSeenSampleTimestampPerUser *prometheus.GaugeVec
 }
@@ -322,16 +320,6 @@ func New(cfg Config, clientConfig ingester_client.Config, limits *validation.Ove
 			Name:      "distributor_ingester_append_failures_total",
 			Help:      "The total number of failed batch appends sent to ingesters.",
 		}, []string{"ingester", "type"}),
-		ingesterQueries: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Namespace: "cortex",
-			Name:      "distributor_ingester_queries_total",
-			Help:      "The total number of queries sent to ingesters.",
-		}, []string{"ingester"}),
-		ingesterQueryFailures: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Namespace: "cortex",
-			Name:      "distributor_ingester_query_failures_total",
-			Help:      "The total number of failed queries sent to ingesters.",
-		}, []string{"ingester"}),
 		replicationFactor: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Namespace: "cortex",
 			Name:      "distributor_replication_factor",
@@ -1264,7 +1252,7 @@ func (d *Distributor) LabelNames(ctx context.Context, from, to model.Time, match
 }
 
 // MetricsForLabelMatchers gets the metrics that match said matchers
-func (d *Distributor) MetricsForLabelMatchers(ctx context.Context, from, through model.Time, matchers ...*labels.Matcher) ([]model.Metric, error) {
+func (d *Distributor) MetricsForLabelMatchers(ctx context.Context, from, through model.Time, matchers ...*labels.Matcher) ([]labels.Labels, error) {
 	replicationSet, err := d.GetIngestersForMetadata(ctx)
 	if err != nil {
 		return nil, err
@@ -1282,15 +1270,15 @@ func (d *Distributor) MetricsForLabelMatchers(ctx context.Context, from, through
 		return nil, err
 	}
 
-	metrics := map[model.Fingerprint]model.Metric{}
+	metrics := map[uint64]labels.Labels{}
 	for _, resp := range resps {
 		ms := ingester_client.FromMetricsForLabelMatchersResponse(resp.(*ingester_client.MetricsForLabelMatchersResponse))
 		for _, m := range ms {
-			metrics[m.Fingerprint()] = m
+			metrics[m.Hash()] = m
 		}
 	}
 
-	result := make([]model.Metric, 0, len(metrics))
+	result := make([]labels.Labels, 0, len(metrics))
 	for _, m := range metrics {
 		result = append(result, m)
 	}
