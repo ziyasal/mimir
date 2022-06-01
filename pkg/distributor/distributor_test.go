@@ -51,6 +51,7 @@ import (
 	"github.com/grafana/mimir/pkg/mimirpb"
 	"github.com/grafana/mimir/pkg/storage/chunk"
 	"github.com/grafana/mimir/pkg/util/chunkcompat"
+	"github.com/grafana/mimir/pkg/util/globalerror"
 	"github.com/grafana/mimir/pkg/util/limiter"
 	util_math "github.com/grafana/mimir/pkg/util/math"
 	"github.com/grafana/mimir/pkg/util/validation"
@@ -100,8 +101,6 @@ func TestConfig_Validate(t *testing.T) {
 func TestDistributor_Push(t *testing.T) {
 	// Metrics to assert on.
 	lastSeenTimestamp := "cortex_distributor_latest_seen_sample_timestamp_seconds"
-	distributorAppend := "cortex_distributor_ingester_appends_total"
-	distributorAppendFailure := "cortex_distributor_ingester_append_failures_total"
 	distributorSampleDelay := "cortex_distributor_sample_delay_seconds"
 	ctx := user.InjectOrgID(context.Background(), "user")
 
@@ -198,17 +197,9 @@ func TestDistributor_Push(t *testing.T) {
 			happyIngesters:   2,
 			samples:          samplesIn{num: 1, startTimestampMs: now.UnixMilli() - 80000*1000}, // 80k seconds old
 			metadata:         0,
-			metricNames:      []string{distributorAppend, distributorAppendFailure, distributorSampleDelay},
+			metricNames:      []string{distributorSampleDelay},
 			expectedResponse: emptyResponse,
 			expectedMetrics: `
-				# HELP cortex_distributor_ingester_append_failures_total The total number of failed batch appends sent to ingesters.
-				# TYPE cortex_distributor_ingester_append_failures_total counter
-				cortex_distributor_ingester_append_failures_total{ingester="2",type="samples"} 1
-				# HELP cortex_distributor_ingester_appends_total The total number of batch appends sent to ingesters.
-				# TYPE cortex_distributor_ingester_appends_total counter
-				cortex_distributor_ingester_appends_total{ingester="0",type="samples"} 1
-				cortex_distributor_ingester_appends_total{ingester="1",type="samples"} 1
-				cortex_distributor_ingester_appends_total{ingester="2",type="samples"} 1
 				# HELP cortex_distributor_sample_delay_seconds Number of seconds by which a sample came in late wrt wallclock.
 				# TYPE cortex_distributor_sample_delay_seconds histogram
 				cortex_distributor_sample_delay_seconds_bucket{le="30"} 0
@@ -233,17 +224,9 @@ func TestDistributor_Push(t *testing.T) {
 			happyIngesters:   2,
 			samples:          samplesIn{num: 1, startTimestampMs: now.UnixMilli() - 1000}, // 1 second old
 			metadata:         0,
-			metricNames:      []string{distributorAppend, distributorAppendFailure, distributorSampleDelay},
+			metricNames:      []string{distributorSampleDelay},
 			expectedResponse: emptyResponse,
 			expectedMetrics: `
-				# HELP cortex_distributor_ingester_append_failures_total The total number of failed batch appends sent to ingesters.
-				# TYPE cortex_distributor_ingester_append_failures_total counter
-				cortex_distributor_ingester_append_failures_total{ingester="2",type="samples"} 1
-				# HELP cortex_distributor_ingester_appends_total The total number of batch appends sent to ingesters.
-				# TYPE cortex_distributor_ingester_appends_total counter
-				cortex_distributor_ingester_appends_total{ingester="0",type="samples"} 1
-				cortex_distributor_ingester_appends_total{ingester="1",type="samples"} 1
-				cortex_distributor_ingester_appends_total{ingester="2",type="samples"} 1
 				# HELP cortex_distributor_sample_delay_seconds Number of seconds by which a sample came in late wrt wallclock.
 				# TYPE cortex_distributor_sample_delay_seconds histogram
 				cortex_distributor_sample_delay_seconds_bucket{le="30"} 1
@@ -268,17 +251,9 @@ func TestDistributor_Push(t *testing.T) {
 			happyIngesters:   2,
 			samples:          samplesIn{num: 0, startTimestampMs: 123456789000},
 			metadata:         1,
-			metricNames:      []string{distributorAppend, distributorAppendFailure, distributorSampleDelay},
+			metricNames:      []string{distributorSampleDelay},
 			expectedResponse: emptyResponse,
 			expectedMetrics: `
-				# HELP cortex_distributor_ingester_append_failures_total The total number of failed batch appends sent to ingesters.
-				# TYPE cortex_distributor_ingester_append_failures_total counter
-				cortex_distributor_ingester_append_failures_total{ingester="2",type="metadata"} 1
-				# HELP cortex_distributor_ingester_appends_total The total number of batch appends sent to ingesters.
-				# TYPE cortex_distributor_ingester_appends_total counter
-				cortex_distributor_ingester_appends_total{ingester="0",type="metadata"} 1
-				cortex_distributor_ingester_appends_total{ingester="1",type="metadata"} 1
-				cortex_distributor_ingester_appends_total{ingester="2",type="metadata"} 1
 				# HELP cortex_distributor_sample_delay_seconds Number of seconds by which a sample came in late wrt wallclock.
 				# TYPE cortex_distributor_sample_delay_seconds histogram
 				cortex_distributor_sample_delay_seconds_bucket{le="30"} 0
@@ -438,6 +413,84 @@ func TestDistributor_MetricsCleanup(t *testing.T) {
 		`), metrics...))
 }
 
+func TestDistributor_PushRequestRateLimiter(t *testing.T) {
+	type testPush struct {
+		expectedError error
+	}
+	ctx := user.InjectOrgID(context.Background(), "user")
+	tests := map[string]struct {
+		distributors     int
+		requestRate      float64
+		requestBurstSize int
+		pushes           []testPush
+	}{
+		"request limit should be evenly shared across distributors": {
+			distributors:     2,
+			requestRate:      4,
+			requestBurstSize: 2,
+			pushes: []testPush{
+				{expectedError: nil},
+				{expectedError: nil},
+				{expectedError: httpgrpc.Errorf(http.StatusTooManyRequests, "request rate limit (2) exceeded")},
+			},
+		},
+		"request limit is disabled when set to 0": {
+			distributors:     2,
+			requestRate:      0,
+			requestBurstSize: 0,
+			pushes: []testPush{
+				{expectedError: nil},
+				{expectedError: nil},
+				{expectedError: nil},
+			},
+		},
+		"request burst should set to each distributor": {
+			distributors:     2,
+			requestRate:      2,
+			requestBurstSize: 3,
+			pushes: []testPush{
+				{expectedError: nil},
+				{expectedError: nil},
+				{expectedError: nil},
+				{expectedError: httpgrpc.Errorf(http.StatusTooManyRequests, "request rate limit (1) exceeded")},
+			},
+		},
+	}
+
+	for testName, testData := range tests {
+		testData := testData
+
+		t.Run(testName, func(t *testing.T) {
+			limits := &validation.Limits{}
+			flagext.DefaultValues(limits)
+			limits.RequestRate = testData.requestRate
+			limits.RequestBurstSize = testData.requestBurstSize
+
+			// Start all expected distributors
+			distributors, _, _ := prepare(t, prepConfig{
+				numIngesters:    3,
+				happyIngesters:  3,
+				numDistributors: testData.distributors,
+				limits:          limits,
+			})
+
+			// Send multiple requests to the first distributor
+			for _, push := range testData.pushes {
+				request := makeWriteRequest(0, 1, 1, false)
+				response, err := distributors[0].Push(ctx, request)
+
+				if push.expectedError == nil {
+					assert.Equal(t, emptyResponse, response)
+					assert.Nil(t, err)
+				} else {
+					assert.Nil(t, response)
+					assert.Equal(t, push.expectedError, err)
+				}
+			}
+		})
+	}
+}
+
 func TestDistributor_PushIngestionRateLimiter(t *testing.T) {
 	type testPush struct {
 		samples       int
@@ -452,7 +505,7 @@ func TestDistributor_PushIngestionRateLimiter(t *testing.T) {
 		ingestionBurstSize int
 		pushes             []testPush
 	}{
-		"limit should be evenly shared across distributors": {
+		"evenly share the ingestion limit across distributors": {
 			distributors:       2,
 			ingestionRate:      10,
 			ingestionBurstSize: 5,
@@ -465,7 +518,7 @@ func TestDistributor_PushIngestionRateLimiter(t *testing.T) {
 				{metadata: 1, expectedError: httpgrpc.Errorf(http.StatusTooManyRequests, "ingestion rate limit (5) exceeded while adding 0 samples and 1 metadata")},
 			},
 		},
-		"burst should set to each distributor": {
+		"for each distributor, set an ingestion burst limit.": {
 			distributors:       2,
 			ingestionRate:      10,
 			ingestionBurstSize: 20,
@@ -948,7 +1001,7 @@ func TestDistributor_QueryStream_ShouldReturnErrorIfMaxChunksPerQueryLimitIsReac
 	// a query running on all series to fail.
 	_, err = ds[0].QueryStream(ctx, math.MinInt32, math.MaxInt32, allSeriesMatchers...)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "the query hit the max number of chunks limit")
+	assert.ErrorContains(t, err, "the query exceeded the maximum number of chunks")
 }
 
 func TestDistributor_QueryStream_ShouldReturnErrorIfMaxSeriesPerQueryLimitIsReached(t *testing.T) {
@@ -998,7 +1051,7 @@ func TestDistributor_QueryStream_ShouldReturnErrorIfMaxSeriesPerQueryLimitIsReac
 	// a query running on all series to fail.
 	_, err = ds[0].QueryStream(ctx, math.MinInt32, math.MaxInt32, allSeriesMatchers...)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "max number of series limit")
+	assert.ErrorContains(t, err, "the query exceeded the maximum number of series")
 }
 
 func TestDistributor_QueryStream_ShouldReturnErrorIfMaxChunkBytesPerQueryLimitIsReached(t *testing.T) {
@@ -1066,7 +1119,7 @@ func TestDistributor_QueryStream_ShouldReturnErrorIfMaxChunkBytesPerQueryLimitIs
 	// a query running on all series to fail.
 	_, err = ds[0].QueryStream(ctx, math.MinInt32, math.MaxInt32, allSeriesMatchers...)
 	require.Error(t, err)
-	assert.Equal(t, err, validation.LimitError(fmt.Sprintf(limiter.ErrMaxChunkBytesHit, maxBytesLimit)))
+	assert.ErrorContains(t, err, fmt.Sprintf(limiter.MaxChunkBytesHitMsgFormat, maxBytesLimit))
 }
 
 func TestDistributor_Push_LabelRemoval(t *testing.T) {
@@ -1278,7 +1331,7 @@ func TestDistributor_Push_LabelNameValidation(t *testing.T) {
 		"label name validation is on by default": {
 			inputLabels: inputLabels,
 			errExpected: true,
-			errMessage:  `sample invalid label: "999.illegal" metric "foo{999.illegal=\"baz\"}"`,
+			errMessage:  `received a series with an invalid label: '999.illegal' series: 'foo{999.illegal="baz"}' (err-mimir-label-invalid)`,
 		},
 		"label name validation can be skipped via config": {
 			inputLabels:                inputLabels,
@@ -1324,33 +1377,40 @@ func TestDistributor_Push_ExemplarValidation(t *testing.T) {
 	tests := map[string]struct {
 		req    *mimirpb.WriteRequest
 		errMsg string
+		errID  globalerror.ID
 	}{
 		"valid exemplar": {
 			req: makeWriteRequestExemplar([]string{model.MetricNameLabel, "test"}, 1000, []string{"foo", "bar"}),
 		},
 		"rejects exemplar with no labels": {
 			req:    makeWriteRequestExemplar([]string{model.MetricNameLabel, "test"}, 1000, []string{}),
-			errMsg: `exemplar missing labels, timestamp: 1000 series: {__name__="test"} labels: {}`,
+			errMsg: `received an exemplar with no valid labels, timestamp: 1000 series: {__name__="test"} labels: {}`,
+			errID:  globalerror.ExemplarLabelsMissing,
 		},
 		"rejects exemplar with no timestamp": {
 			req:    makeWriteRequestExemplar([]string{model.MetricNameLabel, "test"}, 0, []string{"foo", "bar"}),
-			errMsg: `exemplar missing timestamp, timestamp: 0 series: {__name__="test"} labels: {foo="bar"}`,
+			errMsg: `received an exemplar with no timestamp, timestamp: 0 series: {__name__="test"} labels: {foo="bar"}`,
+			errID:  globalerror.ExemplarTimestampInvalid,
 		},
 		"rejects exemplar with too long labelset": {
 			req:    makeWriteRequestExemplar([]string{model.MetricNameLabel, "test"}, 1000, []string{"foo", strings.Repeat("0", 126)}),
-			errMsg: fmt.Sprintf(`exemplar combined labelset exceeds 128 characters, timestamp: 1000 series: {__name__="test"} labels: {foo="%s"}`, strings.Repeat("0", 126)),
+			errMsg: fmt.Sprintf(`received an exemplar where the size of its combined labels exceeds the limit of 128 characters, timestamp: 1000 series: {__name__="test"} labels: {foo="%s"}`, strings.Repeat("0", 126)),
+			errID:  globalerror.ExemplarLabelsTooLong,
 		},
 		"rejects exemplar with too many series labels": {
 			req:    makeWriteRequestExemplar(manyLabels, 0, nil),
-			errMsg: "series has too many labels",
+			errMsg: "received a series whose number of labels exceeds the limit",
+			errID:  globalerror.MaxLabelNamesPerSeries,
 		},
 		"rejects exemplar with duplicate series labels": {
 			req:    makeWriteRequestExemplar([]string{model.MetricNameLabel, "test", "foo", "bar", "foo", "bar"}, 0, nil),
-			errMsg: "duplicate label name",
+			errMsg: "received a series with duplicate label name",
+			errID:  globalerror.SeriesWithDuplicateLabelNames,
 		},
 		"rejects exemplar with empty series label name": {
 			req:    makeWriteRequestExemplar([]string{model.MetricNameLabel, "test", "", "bar"}, 0, nil),
-			errMsg: "invalid label",
+			errMsg: "received a series with an invalid label",
+			errID:  globalerror.SeriesInvalidLabel,
 		},
 	}
 
@@ -1366,6 +1426,7 @@ func TestDistributor_Push_ExemplarValidation(t *testing.T) {
 			if tc.errMsg != "" {
 				fromError, _ := status.FromError(err)
 				assert.Contains(t, fromError.Message(), tc.errMsg)
+				assert.Contains(t, fromError.Message(), tc.errID)
 			} else {
 				assert.Nil(t, err)
 			}
@@ -1549,7 +1610,7 @@ func BenchmarkDistributor_Push(b *testing.B) {
 
 				return metrics, samples
 			},
-			expectedErr: "series has too many labels",
+			expectedErr: "received a series whose number of labels exceeds the limit",
 		},
 		"max label name length limit reached": {
 			prepareConfig: func(limits *validation.Limits) {
@@ -1577,7 +1638,7 @@ func BenchmarkDistributor_Push(b *testing.B) {
 
 				return metrics, samples
 			},
-			expectedErr: "label name too long",
+			expectedErr: "received a series whose label name length exceeds the limit",
 		},
 		"max label value length limit reached": {
 			prepareConfig: func(limits *validation.Limits) {
@@ -1605,7 +1666,7 @@ func BenchmarkDistributor_Push(b *testing.B) {
 
 				return metrics, samples
 			},
-			expectedErr: "label value too long",
+			expectedErr: "received a series whose label value length exceeds the limit",
 		},
 		"timestamp too new": {
 			prepareConfig: func(limits *validation.Limits) {
@@ -1630,7 +1691,7 @@ func BenchmarkDistributor_Push(b *testing.B) {
 
 				return metrics, samples
 			},
-			expectedErr: "timestamp too new",
+			expectedErr: "received a sample whose timestamp is too far in the future",
 		},
 	}
 
@@ -3411,11 +3472,12 @@ func TestDistributorValidation(t *testing.T) {
 	future, past := now.Add(5*time.Hour), now.Add(-25*time.Hour)
 
 	for i, tc := range []struct {
-		metadata  []*mimirpb.MetricMetadata
-		labels    []labels.Labels
-		samples   []mimirpb.Sample
-		exemplars []*mimirpb.Exemplar
-		err       error
+		metadata           []*mimirpb.MetricMetadata
+		labels             []labels.Labels
+		samples            []mimirpb.Sample
+		exemplars          []*mimirpb.Exemplar
+		expectedStatusCode int32
+		expectedErr        string
 	}{
 		// Test validation passes.
 		{
@@ -3439,7 +3501,8 @@ func TestDistributorValidation(t *testing.T) {
 				TimestampMs: int64(future),
 				Value:       4,
 			}},
-			err: httpgrpc.Errorf(http.StatusBadRequest, `timestamp too new: %d metric: "testmetric"`, future),
+			expectedStatusCode: http.StatusBadRequest,
+			expectedErr:        fmt.Sprintf(`received a sample whose timestamp is too far in the future, timestamp: %d series: 'testmetric' (err-mimir-too-far-in-future)`, future),
 		},
 
 		// Test maximum labels names per series.
@@ -3449,7 +3512,8 @@ func TestDistributorValidation(t *testing.T) {
 				TimestampMs: int64(now),
 				Value:       2,
 			}},
-			err: httpgrpc.Errorf(http.StatusBadRequest, `series has too many labels (actual: 3, limit: 2) series: 'testmetric{foo2="bar2", foo="bar"}'`),
+			expectedStatusCode: http.StatusBadRequest,
+			expectedErr:        `received a series whose number of labels exceeds the limit (actual: 3, limit: 2) series: 'testmetric{foo2="bar2", foo="bar"}'`,
 		},
 		// Test multiple validation fails return the first one.
 		{
@@ -3461,7 +3525,8 @@ func TestDistributorValidation(t *testing.T) {
 				{TimestampMs: int64(now), Value: 2},
 				{TimestampMs: int64(past), Value: 2},
 			},
-			err: httpgrpc.Errorf(http.StatusBadRequest, `series has too many labels (actual: 3, limit: 2) series: 'testmetric{foo2="bar2", foo="bar"}'`),
+			expectedStatusCode: http.StatusBadRequest,
+			expectedErr:        `received a series whose number of labels exceeds the limit (actual: 3, limit: 2) series: 'testmetric{foo2="bar2", foo="bar"}'`,
 		},
 		// Test metadata validation fails
 		{
@@ -3471,7 +3536,8 @@ func TestDistributorValidation(t *testing.T) {
 				TimestampMs: int64(now),
 				Value:       1,
 			}},
-			err: httpgrpc.Errorf(http.StatusBadRequest, `metadata missing metric name`),
+			expectedStatusCode: http.StatusBadRequest,
+			expectedErr:        `received a metric metadata with no metric name`,
 		},
 		// Test empty exemplar labels fails.
 		{
@@ -3486,7 +3552,8 @@ func TestDistributorValidation(t *testing.T) {
 				TimestampMs: int64(now),
 				Value:       1,
 			}},
-			err: httpgrpc.Errorf(http.StatusBadRequest, "exemplar missing labels, timestamp: %d series: %+v labels: {}", now, labels.Labels{{Name: labels.MetricName, Value: "testmetric"}, {Name: "foo", Value: "bar"}}),
+			expectedStatusCode: http.StatusBadRequest,
+			expectedErr:        fmt.Sprintf("received an exemplar with no valid labels, timestamp: %d series: %+v labels: {}", now, labels.Labels{{Name: labels.MetricName, Value: "testmetric"}, {Name: "foo", Value: "bar"}}),
 		},
 	} {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
@@ -3504,7 +3571,14 @@ func TestDistributorValidation(t *testing.T) {
 			})
 
 			_, err := ds[0].Push(ctx, mimirpb.ToWriteRequest(tc.labels, tc.samples, tc.exemplars, tc.metadata, mimirpb.API))
-			require.Equal(t, tc.err, err)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+			} else {
+				res, ok := httpgrpc.HTTPResponseFromError(err)
+				require.True(t, ok)
+				require.Equal(t, tc.expectedStatusCode, res.Code)
+				require.Contains(t, string(res.GetBody()), tc.expectedErr)
+			}
 		})
 	}
 }

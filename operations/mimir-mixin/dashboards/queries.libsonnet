@@ -1,8 +1,9 @@
 local utils = import 'mixin-utils/utils.libsonnet';
+local filename = 'mimir-queries.json';
 
 (import 'dashboard-utils.libsonnet') {
-  'mimir-queries.json':
-    ($.dashboard('Queries') + { uid: 'd9931b1054053c8b972d320774bb8f1d' })
+  [filename]:
+    ($.dashboard('Queries') + { uid: std.md5(filename) })
     .addClusterSelectorTemplates()
     .addRow(
       $.row('Query-frontend')
@@ -153,11 +154,6 @@ local utils = import 'mixin-utils/utils.libsonnet';
       .addPanel(
         $.panel('Series per query') +
         utils.latencyRecordingRulePanel('cortex_ingester_queried_series', $.jobSelector($._config.job_names.ingester), multiplier=1) +
-        { yaxes: $.yaxes('short') },
-      )
-      .addPanel(
-        $.panel('Chunks per query') +
-        utils.latencyRecordingRulePanel('cortex_ingester_queried_chunks', $.jobSelector($._config.job_names.ingester), multiplier=1) +
         { yaxes: $.yaxes('short') },
       )
       .addPanel(
