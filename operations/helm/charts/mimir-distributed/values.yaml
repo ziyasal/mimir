@@ -1620,3 +1620,45 @@ smoke_test:
   extraEnvFrom: []
   annotations: {}
   initContainers: []
+
+metamonitoring:
+  grafanaAgent:
+    # -- Controls whether to create MetricsInstance, LogsInstance, and GrafanaAgent CRs to scrape the
+    # ServiceMonitors of the chart and ship metrics to the remote_write endpoints below
+    enabled: false
+
+    # -- Controls whether to install the Grafana Agent Operator
+    installOperator: false
+
+    logs:
+      # -- Default destination for logs. The config here is translated to Promtail client
+      # configuration to write logs to this Loki-compatible remote. Optional.
+      remote:
+        url: ''
+        basicAuth:
+          username: ''
+          password: ''
+
+      # -- Client configurations for the LogsInstance that will scrape Mimir pods. Follows the format of
+      # [`promtail.client`](https://grafana.com/docs/loki/latest/clients/promtail/configuration/#clients).
+      additionalClientConfigs: [ ]
+
+    metrics:
+      # -- Default destination for metrics. The config here is translated to remote_write
+      # configuration to push metrics to this Prometheus-compatible remote. Optional.
+      remote:
+        url: ''
+        basicAuth:
+          username: ''
+          password: ''
+
+      # -- Additional remote-write for the MetricsInstance that will scrape Mimir pods. Follows the format of
+      # [Prometheus `remote_write`](https://prometheus.io/docs/prometheus/2.27/configuration/configuration/#remote_write)
+      additionalRemoteWriteConfigs: [ ]
+
+    # -- When grafanaAgent.enabled, controls whether to create ServiceMonitors for cadvisor, kubelet, and kube-state-metrics.
+    # The scraped metrics and logs are reduced to those pertaining to the Mimir release only.
+    scrapeK8s: false
+
+    # -- Sets the namespace of the resources. Leave empty or unset to use the same namespace as the Helm release.
+    namespace: ''
