@@ -17,11 +17,11 @@ metadata:
 spec:
   remoteWrite:
     {{- with .metrics.remote }}
-    - {{- include "mimir.metaMonitoring.metrics.remoteWrite" (dict "ctx" $ "url" .url "username" .auth.username "passwordSecretName" .auth.passwordSecretName "usernameKey" "default") | nindent 6 }}
+    - {{- include "mimir.metaMonitoring.metrics.remoteWrite" (dict "ctx" $ "url" .url "username" .auth.username "passwordSecretName" .auth.passwordSecretName "usernameKey" "default" "headers" .headers ) | nindent 6 }}
     {{- end }}
     {{- range $i, $cfg := .metrics.additionalRemoteWriteConfigs }}
     {{- with $cfg }}
-    - {{- include "mimir.metaMonitoring.logs.client" (dict "ctx" $ "url" .url "username" .auth.username "tenantId" .tenantId "passwordSecretName" .auth.passwordSecretName "usernameKey" (printf "%s-%d" "additional" $i)) | nindent 6 -}}
+    - {{- include "mimir.metaMonitoring.logs.client" (dict "ctx" $ "url" .url "username" .auth.username "tenantId" .tenantId "passwordSecretName" .auth.passwordSecretName "usernameKey" (printf "%s-%d" "additional" $i) "headers" .headers ) | nindent 6 -}}
     {{- end }}
     {{- end }}
 

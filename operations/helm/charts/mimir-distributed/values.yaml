@@ -1661,6 +1661,9 @@ metaMonitoring:
       # Note that you need to configure serviceMonitor in order to have some metrics available.
       remote:
         url: ''
+
+        # -- Used to add HTTP headers to remote-write requests.
+        headers: { }
         auth:
           # -- Basic authentication username. Optional.
           username: ''

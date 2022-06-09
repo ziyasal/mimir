@@ -14,6 +14,10 @@ basicAuth:
     key: password
 {{- end }}
 {{- end }}
+{{- with .headers }}
+headers:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 {{- end -}}
 
