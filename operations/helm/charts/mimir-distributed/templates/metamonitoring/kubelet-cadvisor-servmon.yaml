@@ -7,7 +7,7 @@ metadata:
   name: {{ include "mimir.resourceName" (dict "ctx" $ "component" "k8s-kubelet-cadvisor") }}
   namespace: {{ .namespace | default $.Release.Namespace }}
   labels:
-    {{- include "mimir.labels" (dict "ctx" $ "component" "k8s-kubelet-cadvisor") | nindent 4 }}
+    {{- include "mimir.labels" (dict "ctx" $ "component" "meta-monitoring") | nindent 4 }}
     {{- with .labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

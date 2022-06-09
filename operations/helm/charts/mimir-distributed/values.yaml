@@ -1675,3 +1675,11 @@ metaMonitoring:
 
     # -- Sets the namespace of the resources. Leave empty or unset to use the same namespace as the Helm release.
     namespace: ''
+
+    # -- Labels to add to all monitoring.grafana.com custom resources.
+    # Does not affect the ServiceMonitors for kubernetes metrics; use serviceMonitor.labels for that.
+    labels: {}
+
+    # -- Annotations to add to all monitoring.grafana.com custom resources.
+    # Does not affect the ServiceMonitors for kubernetes metrics; use serviceMonitor.annotations for that.
+    annotations: {}

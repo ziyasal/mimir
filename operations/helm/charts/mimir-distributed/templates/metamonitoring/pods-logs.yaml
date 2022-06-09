@@ -38,6 +38,7 @@ spec:
 
   selector:
     matchLabels:
+      # Scrape logs from all components
       {{- include "mimir.selectorLabels" (dict "ctx" $) | nindent 6 }}
 
 {{- end -}}
