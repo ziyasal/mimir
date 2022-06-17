@@ -1652,7 +1652,7 @@ metaMonitoring:
           passwordSecretKey: 'password'
 
       # -- Client configurations for the LogsInstance that will scrape Mimir pods. Follows the format of .remote.
-      additionalClientConfigs: [ ]
+      additionalClientConfigs: []
 
     metrics:
       # -- Default destination for metrics. The config here is translated to remote_write
@@ -1662,7 +1662,7 @@ metaMonitoring:
         url: ''
 
         # -- Used to add HTTP headers to remote-write requests.
-        headers: { }
+        headers: {}
         auth:
           # -- Basic authentication username. Optional.
           username: ''
@@ -1673,7 +1673,7 @@ metaMonitoring:
           passwordSecretKey: 'password'
 
       # -- Additional remote-write for the MetricsInstance that will scrape Mimir pods. Follows the format of .remote.
-      additionalRemoteWriteConfigs: [ ]
+      additionalRemoteWriteConfigs: []
 
       scrapeK8s:
         # -- When grafanaAgent.enabled and serviceMonitor.enabled, controls whether to create ServiceMonitors CRs
@@ -1692,8 +1692,8 @@ metaMonitoring:
 
     # -- Labels to add to all monitoring.grafana.com custom resources.
     # Does not affect the ServiceMonitors for kubernetes metrics; use serviceMonitor.labels for that.
-    labels: { }
+    labels: {}
 
     # -- Annotations to add to all monitoring.grafana.com custom resources.
     # Does not affect the ServiceMonitors for kubernetes metrics; use serviceMonitor.annotations for that.
-    annotations: { }
+    annotations: {}
