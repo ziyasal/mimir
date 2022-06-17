@@ -1646,8 +1646,10 @@ metaMonitoring:
           # -- Basic authentication username. Optional.
           username: ''
 
-          # -- The value under key 'password' in this secret will be used as the basic authentication password. Optional.
+          # -- The value under key passwordSecretKey in this secret will be used as the basic authentication password. Required only if passwordSecretKey is set.
           passwordSecretName: ''
+          # -- The value under this key in passwordSecretName will be used as the basic authentication password. Required only if passwordSecretName is set.
+          passwordSecretKey: 'password'
 
       # -- Client configurations for the LogsInstance that will scrape Mimir pods. Follows the format of .remote.
       additionalClientConfigs: [ ]
@@ -1665,8 +1667,10 @@ metaMonitoring:
           # -- Basic authentication username. Optional.
           username: ''
 
-          # -- The value under key 'password' in this secret will be used as the basic authentication password. Optional.
+          # -- The value under key passwordSecretKey in this secret will be used as the basic authentication password. Required only if passwordSecretKey is set.
           passwordSecretName: ''
+          # -- The value under this key in passwordSecretName will be used as the basic authentication password. Required only if passwordSecretName is set.
+          passwordSecretKey: 'password'
 
       # -- Additional remote-write for the MetricsInstance that will scrape Mimir pods. Follows the format of .remote.
       additionalRemoteWriteConfigs: [ ]

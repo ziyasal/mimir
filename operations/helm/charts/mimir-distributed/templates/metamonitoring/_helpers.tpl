@@ -5,12 +5,15 @@ basicAuth:
 {{- if .auth.username }}
   username:
     name: {{ include "mimir.resourceName" (dict "ctx" $.ctx "component" "metrics-instance-usernames") }}
-    key: {{ .usernameKey }}
+    key: {{ .usernameKey | quote }}
 {{- end }}
-{{- if .auth.passwordSecretName }}
+{{- with .auth }}
+{{- if and .passwordSecretKey .passwordSecretName }}
   password:
-    name: {{ .auth.passwordSecretName }}
-    key: password
+    name: {{ .passwordSecretName | quote }}
+    key: {{ .passwordSecretKey | quote }}
+{{- else if or .passwordSecretKey .passwordSecretName }}{{ required "Set either both passwordSecretKey and passwordSecretName or neither" nil }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- with .headers }}
@@ -29,14 +32,18 @@ basicAuth:
 {{- if .auth.username }}
   username:
     name: {{ include "mimir.resourceName" (dict "ctx" $.ctx "component" "logs-instance-usernames") }}
-    key: {{ .usernameKey }}
+    key: {{ .usernameKey | quote }}
 {{- end }}
-{{- if .auth.passwordSecretName }}
+{{- with .auth }}
+{{- if and .passwordSecretKey .passwordSecretName }}
   password:
-    name: {{ .auth.passwordSecretName }}
-    key: password
+    name: {{ .passwordSecretName | quote }}
+    key: {{ .passwordSecretKey | quote }}
+{{- else if or .passwordSecretKey .passwordSecretName }}
+{{ required "Set either both passwordSecretKey and passwordSecretName or neither" nil }}
+{{- end }}
 {{- end }}
 {{- end }}
 externalLabels:
-  cluster: "{{ include "mimir.clusterName" $.ctx }}"
+  cluster: {{ include "mimir.clusterName" $.ctx | quote}}
 {{- end -}}
