@@ -1,15 +1,15 @@
 {{- define "mimir.metaMonitoring.metrics.remoteWrite" -}}
 url: {{ .url }}
-{{- if or .username .passwordSecretName }}
+{{- if .auth }}
 basicAuth:
-{{- if .username }}
+{{- if .auth.username }}
   username:
     name: {{ include "mimir.resourceName" (dict "ctx" $.ctx "component" "metrics-instance-usernames") }}
     key: {{ .usernameKey }}
 {{- end }}
-{{- if .passwordSecretName }}
+{{- if .auth.passwordSecretName }}
   password:
-    name: {{ .passwordSecretName }}
+    name: {{ .auth.passwordSecretName }}
     key: password
 {{- end }}
 {{- end }}
@@ -21,19 +21,19 @@ headers:
 
 {{- define "mimir.metaMonitoring.logs.client" -}}
 url: {{ .url }}
-{{- if .tenantId }}
-tenantId: {{ .tenantId | quote }}
+{{- if .auth }}
+{{- if .auth.tenantId }}
+tenantId: {{ .auth.tenantId | quote }}
 {{- end }}
-{{- if or .username .passwordSecretName }}
 basicAuth:
-{{- if .username }}
+{{- if .auth.username }}
   username:
     name: {{ include "mimir.resourceName" (dict "ctx" $.ctx "component" "logs-instance-usernames") }}
     key: {{ .usernameKey }}
 {{- end }}
-{{- if .passwordSecretName }}
+{{- if .auth.passwordSecretName }}
   password:
-    name: {{ .passwordSecretName }}
+    name: {{ .auth.passwordSecretName }}
     key: password
 {{- end }}
 {{- end }}

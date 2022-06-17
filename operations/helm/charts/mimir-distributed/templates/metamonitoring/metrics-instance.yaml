@@ -19,7 +19,7 @@ spec:
     {{- range $i, $cfg := prepend .metrics.additionalRemoteWriteConfigs .metrics.remote }}
     {{- with $cfg }}
     {{- if $cfg.url }}
-    - {{- include "mimir.metaMonitoring.metrics.remoteWrite" (dict "ctx" $ "url" .url "username" .auth.username "passwordSecretName" .auth.passwordSecretName "usernameKey" (printf "username-%d" $i) "headers" .headers ) | nindent 6 -}}
+    - {{- include "mimir.metaMonitoring.metrics.remoteWrite" (dict "ctx" $ "url" .url "auth" .auth "usernameKey" (printf "username-%d" $i) "headers" .headers ) | nindent 6 -}}
     {{- end }}
     {{- end }}
     {{- end }}
