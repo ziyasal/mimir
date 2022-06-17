@@ -25,7 +25,7 @@ headers:
 {{- if .url -}}
 url: {{ .url }}
 {{- if .tenantId }}
-tenantId: {{ .tenantId }}
+tenantId: {{ .tenantId | quote }}
 {{- end }}
 {{- if or .username .passwordSecretName }}
 basicAuth:
