@@ -1,5 +1,4 @@
 {{- define "mimir.metaMonitoring.metrics.remoteWrite" -}}
-{{- if .url -}}
 url: {{ .url }}
 {{- if or .username .passwordSecretName }}
 basicAuth:
@@ -18,11 +17,9 @@ basicAuth:
 headers:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- end }}
 {{- end -}}
 
 {{- define "mimir.metaMonitoring.logs.client" -}}
-{{- if .url -}}
 url: {{ .url }}
 {{- if .tenantId }}
 tenantId: {{ .tenantId | quote }}
@@ -42,5 +39,4 @@ basicAuth:
 {{- end }}
 externalLabels:
   cluster: "{{ include "mimir.clusterName" $.ctx }}"
-{{- end -}}
 {{- end -}}

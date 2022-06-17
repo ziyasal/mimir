@@ -16,12 +16,11 @@ metadata:
   {{- end }}
 spec:
   clients:
-    {{- with .logs.remote }}
-    - {{- include "mimir.metaMonitoring.logs.client" (dict "ctx" $ "url" .url "username" .auth.username "tenantId" .tenantId "passwordSecretName" .auth.passwordSecretName "usernameKey" "default") | nindent 6 -}}
-    {{- end }}
-    {{- range $i, $cfg := .logs.additionalClientConfigs }}
+    {{- range $i, $cfg := prepend .logs.additionalClientConfigs .logs.remote }}
     {{- with $cfg }}
-    - {{- include "mimir.metaMonitoring.logs.client" (dict "ctx" $ "url" .url "username" .auth.username "tenantId" .tenantId "passwordSecretName" .auth.passwordSecretName "usernameKey" (printf "%s-%d" "additional" $i)) | nindent 6 -}}
+    {{- if $cfg.url }}
+    - {{- include "mimir.metaMonitoring.logs.client" (dict "ctx" $ "url" .url "username" .auth.username "tenantId" .tenantId "passwordSecretName" .auth.passwordSecretName "usernameKey" (printf "username-%d" $i)) | nindent 6 -}}
+    {{- end }}
     {{- end }}
     {{- end }}
 
