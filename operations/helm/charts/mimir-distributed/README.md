@@ -65,7 +65,7 @@ resources (CPU/memory) available in your cluster before installing Grafana Mimir
 
 ### Migration from Cortex to Grafana Mimir
 
-Please consult the [Migration from Cortex to Grafana](https://grafana.com/docs/mimir/v2.1.x/migration-guide/migrating-from-cortex/) guide on how to update the configuration.
+Please consult the [Migration from Cortex to Grafana](../../../../docs/sources/migration-guide/migrating-from-cortex.md) guide on how to update the configuration.
 Prepare a custom values file with the contents:
 
 ```yaml
@@ -136,7 +136,7 @@ production clusters at this scale.
 It is important to ensure that you run no more than one ingester replica
 per node so that a single node failure does not cause data loss. Zone aware
 replication can be configured to ensure data replication spans availability
-zones. Refer to [Zone Aware Replication](https://grafana.com/docs/mimir/v2.1.x/operators-guide/configuring/configuring-zone-aware-replication/)
+zones. Refer to [Zone Aware Replication](../../../../docs/sources/operators-guide/configuring/configuring-zone-aware-replication.md)
 for more information.
 Minio is no longer enabled and you are encouraged to use your cloud providers
 object storage service for production deployments.
@@ -158,7 +158,7 @@ production clusters at this scale.
 It is important to ensure that you run no more than one ingester replica
 per node so that a single node failure does not cause data loss. Zone aware
 replication can be configured to ensure data replication spans availability
-zones. Refer to [Zone Aware Replication](https://grafana.com/docs/mimir/v2.1.x/operators-guide/configuring/configuring-zone-aware-replication/)
+zones. Refer to [Zone Aware Replication](../../../../docs/sources/operators-guide/configuring/configuring-zone-aware-replication.md)
 for more information.
 Minio is no longer enabled and you are encouraged to use your cloud providers
 object storage service for production deployments.
@@ -186,4 +186,4 @@ helm install test ./ --values ./ci/test-values.yaml
 
 # Contributing/Releasing
 
-Please see the dedicated "[Contributing to Grafana Mimir helm chart](https://github.com/grafana/mimir/tree/main/docs/internal/contributing/contributing-to-helm-chart.md)" page.
+Please see the dedicated "[Contributing to Grafana Mimir helm chart](../../../../docs/internal/contributing/contributing-to-helm-chart.md)" page.
