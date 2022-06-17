@@ -1633,19 +1633,16 @@ metaMonitoring:
     # In that case install the CRDs manually from https://github.com/grafana/agent/tree/main/production/operator/crds
     installOperator: false
 
-    # -- Controls whether to scrape cadvisor, kubelet, and kube-state-metrics for metrics related to Mimir.
-    # The scraped metrics will be limited to ones concerning Mimir only: where pod
-    scrapeK8s: true
-
     logs:
       # -- Default destination for logs. The config here is translated to Promtail client
       # configuration to write logs to this Loki-compatible remote. Optional.
       remote:
         url: ''
 
-        # -- Used to set X-Scope-OrgID header on requests. Usually not used in combination with basic authentication.
-        tenantId: ''
         auth:
+          # -- Used to set X-Scope-OrgID header on requests. Usually not used in combination with username and password.
+          tenantId: ''
+
           # -- Basic authentication username. Optional.
           username: ''
 
