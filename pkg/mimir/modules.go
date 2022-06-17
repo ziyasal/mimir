@@ -829,7 +829,7 @@ func (t *Mimir) setupModuleManager() error {
 		Purger:                   {TenantDeletion},
 		TenantFederation:         {Queryable},
 		Write:                    {Distributor, Ingester},
-		Read:                     {QueryFrontend, QueryScheduler, Querier, Ruler, Purger},
+		Read:                     {QueryFrontend, QueryScheduler, Querier, Ruler, Purger, OverridesExporter},
 		Store:                    {StoreGateway, Compactor},
 		All:                      {QueryFrontend, Querier, Ingester, Distributor, Purger, StoreGateway, Ruler, Compactor},
 	}
