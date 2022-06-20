@@ -1637,6 +1637,7 @@ metaMonitoring:
       # -- Default destination for logs. The config here is translated to Promtail client
       # configuration to write logs to this Loki-compatible remote. Optional.
       remote:
+        # -- Full URL for Loki push endpoint. Usually ends in /loki/api/v1/push
         url: ''
 
         auth:
@@ -1659,6 +1660,7 @@ metaMonitoring:
       # configuration to push metrics to this Prometheus-compatible remote. Optional.
       # Note that you need to configure serviceMonitor in order to have some metrics available.
       remote:
+        # -- Full URL for Prometheus remote-write. Usually ends in /push
         url: ''
 
         # -- Used to add HTTP headers to remote-write requests.
