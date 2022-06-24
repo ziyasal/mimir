@@ -26,6 +26,14 @@ Once a PR that updates the chart version is merged to `main`, it takes a couple 
 
 In order to search, template, install, upgrade, etc beta versions of charts, Helm commands require the user to specify the `--devel` flag. This means that checking for whether the beta version is published should be done with `helm search repo --devel`.
 
+## Linting
+
+Install [ct](https://github.com/helm/chart-testing) and run
+
+```bash
+ct lint --config operations/helm/ct.yaml --charts operations/helm/charts/mimir-distributed
+```
+
 ## Automated Comparison with Jsonnet
 
 In order to prevent configuration drift between the Mimir jsonnet library and the Mimir helm chart, an automated diff is performed against every pull request.
