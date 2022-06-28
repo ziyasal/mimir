@@ -22,7 +22,6 @@ import (
 	"github.com/weaveworks/common/middleware"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 
-	"github.com/grafana/mimir/integration/e2emimir"
 	"github.com/grafana/mimir/pkg/mimirpb"
 )
 
@@ -205,7 +204,7 @@ func createOTLPMetricRequest(t testing.TB) pmetricotlp.Request {
 	prwReq := &prompb.WriteRequest{}
 	require.NoError(t, proto.Unmarshal(input, prwReq))
 
-	return e2emimir.TimeseriesToOTLPRequest(prwReq.Timeseries)
+	return TimeseriesToOTLPRequest(prwReq.Timeseries)
 }
 
 func createPrometheusRemoteWriteProtobuf(t testing.TB) []byte {

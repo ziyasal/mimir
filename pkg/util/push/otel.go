@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	kitlog "github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -14,6 +15,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/weaveworks/common/middleware"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 
@@ -139,7 +141,7 @@ func promToMimirTimeseries(promTs *prompb.TimeSeries) mimirpb.PreallocTimeseries
 	exemplars := make([]mimirpb.Exemplar, 0, len(promTs.Exemplars))
 	for _, exemplar := range promTs.Exemplars {
 		labels := make([]mimirpb.LabelAdapter, 0, len(exemplar.Labels))
-		for _, label := range promTs.Labels {
+		for _, label := range exemplar.Labels {
 			labels = append(labels, mimirpb.LabelAdapter{
 				Name:  label.Name,
 				Value: label.Value,
@@ -159,4 +161,36 @@ func promToMimirTimeseries(promTs *prompb.TimeSeries) mimirpb.PreallocTimeseries
 	ts.Exemplars = exemplars
 
 	return mimirpb.PreallocTimeseries{TimeSeries: ts}
+}
+
+// TimeseriesToOTLPRequest is used in tests.
+func TimeseriesToOTLPRequest(timeseries []prompb.TimeSeries) pmetricotlp.Request {
+	d := pmetric.NewMetrics()
+
+	for _, ts := range timeseries {
+		name := ""
+		attributes := pcommon.NewMap()
+
+		for _, l := range ts.Labels {
+			if l.Name == "__name__" {
+				name = l.Value
+				continue
+			}
+
+			attributes.InsertString(l.Name, l.Value)
+		}
+
+		metric := d.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+		metric.SetName(name)
+		metric.SetDataType(pmetric.MetricDataTypeGauge)
+
+		for _, sample := range ts.Samples {
+			datapoint := metric.Gauge().DataPoints().AppendEmpty()
+			datapoint.SetTimestamp(pcommon.NewTimestampFromTime(time.Unix(0, int64(sample.Timestamp)*1000000)))
+			datapoint.SetDoubleVal(sample.Value)
+			attributes.CopyTo(datapoint.Attributes())
+		}
+	}
+
+	return pmetricotlp.NewRequestFromMetrics(d)
 }
